@@ -97,9 +97,9 @@ def brute_force_schedule() -> tuple[list[list[Shift]], float]:
         schedule = [[] for i in range(7)]
         for day in DAYS:
             """
-            Каждые 5 минут мы проверяем состояние
-            Если это не час пик, мы ждем, пока не наберется 15 минут
-            Если через час начнется час пик, то мы начинаем отправлять автобусы с частотой 5 минут
+            Каждые 10 минут мы проверяем состояние
+            Если это не час пик, мы ждем, пока не наберется 20 минут
+            Если через час начнется час пик, то мы начинаем отправлять автобусы с частотой 10 минут
             """
             current_time = datetime.strptime("06:00", "%H:%M")
             last_bus_time = datetime.strptime("03:00", "%H:%M")
@@ -119,8 +119,7 @@ def brute_force_schedule() -> tuple[list[list[Shift]], float]:
                     today_drivers_b.append(driver)
 
             """
-            Дек содержит свободных водителей, причем в начало
-            мы добавляем водителей типа B, а в конец - типа А
+            Дек содержит свободных водителей, причем сначала мы равномерно перемешиваем 
             Так мы делаем, потому что нам лучше позже отправлять водителей типа B,
             Чтобы они покрыли больше времени.
             Водителей в пути мы же закидываем в очередь.(но дек)
@@ -134,6 +133,22 @@ def brute_force_schedule() -> tuple[list[list[Shift]], float]:
             available_buses = buses.copy()
 
             # Перемешиваем водителей двух типов
+            # TODO переписать
+            l, r = 0, 0
+            while l < len(today_drivers_a) or r < len(today_drivers_b):
+                if l == len(today_drivers_a):
+                    available_drivers.append(today_drivers_b[r])
+                    r += 1
+                elif r == len(today_drivers_b):
+                    available_drivers.append(today_drivers_a[l])
+                    l += 1
+                else:
+                    if (l + r) % 2 == 0:
+                        available_drivers.append[today_drivers_a[l]]
+                        l += 1
+                    else:
+                        available_drivers.append(today_drivers_b[r])
+                        r += 1
             for i, driver in enumerate(today_drivers_a + today_drivers_b):
                 if i % 2 == 0:
                     available_drivers.append(driver)
