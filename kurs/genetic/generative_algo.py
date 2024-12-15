@@ -58,28 +58,31 @@ GENERATIONS = 100
 MUTATION_RATE = 0.1
 
 
+def generate_one_schedule(drivers: list[Driver]) -> list[tuple[int, datetime]]:
+    schedule = []
+    driver_next_available = {driver.id: START_TIME for driver in drivers}
+    current_time = START_TIME
+    while current_time < END_TIME:
+        available_drivers = [
+            driver
+            for driver in drivers
+            if driver_next_available[driver.id] <= current_time
+        ]
+        if not available_drivers:
+            break
+        driver = random.choice(available_drivers)
+
+        schedule.append((driver.id, current_time))
+        driver_next_available[driver.id] += ROUTE_DURATION
+        current_time += timedelta(minutes=random.choice([5, 10, 15, 20]))  # Интервалы
+    return schedule
+
+
 # Генерация начальной популяции
-def initialize_population(drivers: list[Driver]) -> list[tuple[int, datetime]]:
+def initialize_population(drivers: list[Driver]) -> list[list[tuple[int, datetime]]]:
     population = []
     for _ in range(POPULATION_SIZE):
-        schedule = []
-        driver_next_available = {driver.id: START_TIME for driver in drivers}
-        current_time = START_TIME
-        while current_time < END_TIME:
-            available_drivers = [
-                driver
-                for driver in drivers
-                if driver_next_available[driver.id] <= current_time
-            ]
-            if not available_drivers:
-                break
-            driver = random.choice(available_drivers)
-
-            schedule.append((driver.id, current_time))
-            driver_next_available[driver.id] += ROUTE_DURATION
-            current_time += timedelta(
-                minutes=random.choice([5, 10, 15, 20])
-            )  # Интервалы
+        schedule = generate_one_schedule(drivers)
         population.append(schedule)
     return population
 
@@ -118,8 +121,6 @@ def fitness(schedule: list[tuple[int, datetime]]) -> float:
 def is_schedule_valid(schedule: list[tuple[int, datetime]]) -> bool:
     """
     Проверяет, что водители не выезжают чаще, чем раз в час.
-    :param schedule: Список расписаний в формате [(driver_id, departure_time), ...].
-    :return: True, если расписание корректно, иначе False.
     """
     if not schedule:
         return False
@@ -145,10 +146,6 @@ def clean_population(
 ) -> list[list[tuple[int, datetime]]]:
     """
     Удаляет некорректные особи из популяции и заменяет их новыми.
-    :param population: Текущая популяция.
-    :param initialize_population_fn: Функция для генерации новых особей.
-    :param max_invalid: Максимальное количество некорректных расписаний, которые будут заменены.
-    :return: Очищенная популяция.
     """
     valid_population = []
     invalid_count = 0
@@ -159,7 +156,7 @@ def clean_population(
         elif invalid_count < max_invalid:
             # Генерируем новую особь вместо некорректной
             # Берем первую особь из нового поколения
-            new_individual = initialize_population(drivers)[0]
+            new_individual = generate_one_schedule(drivers)
             valid_population.append(new_individual)
             invalid_count += 1
 
@@ -201,7 +198,7 @@ def genetic_algorithm(num_buses: int, route_duration: timedelta):
     # ]
     best_loss = 100000000
     total_schedule = []
-    for count_drivers in range(10, num_buses + 1):
+    for count_drivers in range(num_buses // 2, num_buses + 1):
         drivers = [Driver("B", i) for i in range(1, count_drivers)]
 
         population = initialize_population(drivers)

@@ -9,7 +9,7 @@ class Driver:
         self.type = driver_type  # "A" или "B"
         self.id = id
 
-        self.remaining_hours = 8 if driver_type == "A" else 21  # Рабочие часы для типа
+        self.remaining_hours = 9 if driver_type == "A" else 21  # Рабочие часы для типа
         self.next_available_time = START_TIME  # Время, когда водитель будет доступен
         self.first_day = 1  # Первый рабочий день на неделе
         self.start_time: datetime = None
@@ -42,7 +42,7 @@ PEAK_HOURS = [
     (datetime.strptime("17:00", "%H:%M"), datetime.strptime("19:00", "%H:%M")),
 ]
 
-NUM_BUSES = 20
+NUM_BUSES = 50
 buses = [Bus(i) for i in range(1, NUM_BUSES)]
 
 ROUTE_DURATION = timedelta(minutes=60)
@@ -66,8 +66,7 @@ def combined_loss(
 ) -> float:
     waiting_loss = 0
     for day_schedule in schedule:
-        if len(day_schedule) == 0:
-            waiting_loss += 400000000
+        waiting_loss += max(0, (60 - len(day_schedule))) * 1000
         for i in range(len(day_schedule) - 1):
             current_time = day_schedule[i].start_time
             next_time = day_schedule[i + 1].start_time
@@ -96,7 +95,7 @@ def brute_force_schedule(
     сегодня работает водителей каждого типа.
     Затем считаем функцию потерь и сравниваем оптимальность
     """
-    best_loss = 10000000
+    best_loss = 100000000000000000
     best_schedule = None
     best_count = []
 
@@ -133,13 +132,14 @@ def brute_force_schedule(
             for driver in drivers:
                 # Обнуляем пройденные маршруты для водителя
                 driver.route_count = 0
+                driver.start_time = None
                 if (
                     driver.type == "A"
                     and driver.first_day <= day < driver.first_day + 5
                 ):
                     today_drivers_a.append(driver)
                 if driver.type == "B" and (
-                    driver.first_day == day or driver.first_day + 5 == day
+                    driver.first_day == day or driver.first_day + 3 == day
                 ):
                     today_drivers_b.append(driver)
 
@@ -152,32 +152,20 @@ def brute_force_schedule(
             обед - это конец, а перерыв - начало
             """
 
-            available_drivers = deque()
+            available_drivers = []
             busy_drivers = deque()
+            lunch_drivers = deque()
             break_drivers = deque()
             available_buses = buses.copy()
 
-            # Перемешиваем водителей двух типов
-            l, r = 0, 0
-            while l < len(today_drivers_a) or r < len(today_drivers_b):
-                if l == len(today_drivers_a):
-                    available_drivers.append(today_drivers_b[r])
-                    r += 1
-                elif r == len(today_drivers_b):
-                    available_drivers.append(today_drivers_a[l])
-                    l += 1
-                else:
-                    if (l + r) % 2 == 0:
-                        available_drivers.append(today_drivers_a[l])
-                        l += 1
-                    else:
-                        available_drivers.append(today_drivers_b[r])
-                        r += 1
-            for i, driver in enumerate(today_drivers_a + today_drivers_b):
-                if i % 2 == 0:
-                    available_drivers.append(driver)
-                else:
-                    available_drivers.appendleft(driver)
+            for i in range(0, len(today_drivers_a) // 2):
+                available_drivers.append(today_drivers_a[i])
+
+            for i in range(0, len(today_drivers_b)):
+                available_drivers.append(today_drivers_b[i])
+
+            for i in range(len(today_drivers_a) // 2, len(today_drivers_a)):
+                available_drivers.append(today_drivers_a[i])
 
             while current_time < END_TIME:
                 next_time = current_time + timedelta(minutes=PEAK_MAX_WAIT)
@@ -187,9 +175,8 @@ def brute_force_schedule(
                     for start, end in PEAK_HOURS
                 )
                 current_invterval = PEAK_MAX_WAIT if is_peak else NON_PEAK_MAX_WAIT
-                # print(current_time, is_peak, current_invterval)
+
                 # Обновляем состояние водителей
-                # Смотрим на водителей в пути
                 while (
                     len(busy_drivers) > 0
                     and busy_drivers[0].next_available_time <= current_time
@@ -199,18 +186,30 @@ def brute_force_schedule(
                     # Проверить, нужен ли обед. Иначе - просто перерыв каждые два часа
                     # Логика распределения водителей по обедам, перерывам и работе
                     #
-                    if driver.route_count > 4:
+                    if (
+                        driver.type == "A"
+                        and driver.start_time + timedelta(hours=driver.remaining_hours)
+                        >= current_time
+                    ):
+                        # Водитель отработал смену
+                        continue
+                    elif driver.route_count > 4:
                         driver.next_available_time = current_time + LUNCH_DURATION
-                        break_drivers.append(driver)
+                        lunch_drivers.append(driver)
                     elif driver.route_count > 2:
                         driver.next_available_time = current_time + BREAK_DURATION
-                        break_drivers.appendleft(driver)
+                        break_drivers.append(driver)
                     else:
                         driver.next_available_time = current_time
-                        if len(available_drivers) % 2 == 0:
-                            available_drivers.append(driver)
-                        else:
-                            available_drivers.appendleft(driver)
+                        available_drivers.append(driver)
+
+                while (
+                    len(lunch_drivers) > 0
+                    and lunch_drivers[0].next_available_time <= current_time
+                ):
+                    driver = lunch_drivers.popleft()
+                    driver.next_available_time = current_time
+                    available_drivers.append(driver)
 
                 while (
                     len(break_drivers) > 0
@@ -218,10 +217,7 @@ def brute_force_schedule(
                 ):
                     driver = break_drivers.popleft()
                     driver.next_available_time = current_time
-                    if len(available_drivers) % 2 == 0:
-                        available_drivers.append(driver)
-                    else:
-                        available_drivers.appendleft(driver)
+                    available_drivers.append(driver)
 
                 # Запускаем автобус, прошло достаточно времени с отправки последнего автобуса
                 if (
@@ -235,7 +231,7 @@ def brute_force_schedule(
                         # Если свободных автобусов нет - ждем, когда он появится
                         current_time = next_time
                         continue
-                    driver = available_drivers.popleft()
+                    driver = available_drivers.pop()
                     bus = available_buses.pop()
                     if driver.start_time is None:
                         driver.start_time = current_time
@@ -258,8 +254,8 @@ def brute_force_schedule(
             NON_PEAK_MAX_WAIT,
             PEAK_MAX_WAIT,
             len(drivers),
-            5.0,
-            100.0,
+            10.0,
+            4.0,
         )
         if schedule_loss < best_loss:
             best_loss = schedule_loss
@@ -296,7 +292,7 @@ def brute_force_schedule(
                     pos_d += 1
                 da.first_day = DAYS[pos_d]
             for i, db in enumerate(driver_b):
-                db.first_day = DAYS[i % 2]
+                db.first_day = DAYS[i % 4]
 
             drivers = drivers_a + driver_b
             generate_schedule_per_day(drivers, buses)

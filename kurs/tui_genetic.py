@@ -39,7 +39,7 @@ class CalendarApp(App):
 
     def generate_table(self):
         table = DataTable(id="content")
-        table.add_columns("Водитель", "Автобус", "Выезд")
+        table.add_columns("Водитель", "Выезд")
         return table
 
     def update_table(self):
