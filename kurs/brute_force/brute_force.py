@@ -12,9 +12,9 @@ class Driver:
         self.remaining_hours = 8 if driver_type == "A" else 21  # Рабочие часы для типа
         self.next_available_time = START_TIME  # Время, когда водитель будет доступен
         self.first_day = 1  # Первый рабочий день на неделе
-        self.start_time = None
+        self.start_time: datetime = None
         self.route_count = 0
-        self.current_bus = None
+        self.current_bus: Bus = None
 
 
 class Bus:
@@ -25,14 +25,13 @@ class Bus:
 
 class Shift:
     def __init__(self, driver, bus, start_time):
-        self.driver = driver
-        self.bus = bus
-        self.start_time = start_time
+        self.driver: Driver = driver
+        self.bus: Bus = bus
+        self.start_time: datetime = start_time
 
     def __str__(self):
-        return (
-            f"Водитель-{self.driver.id} Автобус-{self.bus.id} Выезд-{self.start_time}"
-        )
+        print(self.start_time.strftime("%H:%M:%S"))
+        return f"Водитель-{self.driver.id} Автобус-{self.bus.id} Выезд-{self.start_time.strftime("%H:%M:%S")}"
 
 
 # Параметры задачи
@@ -52,7 +51,7 @@ BREAK_DURATION = timedelta(minutes=15)
 
 PEAK_MAX_WAIT = 10  # Минуты
 NON_PEAK_MAX_WAIT = 20  # Минуты
-DAYS = [i for i in range(1, 8)]
+DAYS = [i for i in range(0, 7)]
 
 
 # Функция потерь
@@ -88,7 +87,9 @@ def combined_loss(
 
 
 # Brute Force алгоритм
-def brute_force_schedule() -> tuple[list[list[Shift]], float, list[int]]:
+def brute_force_schedule(
+    num_buses: int, route_duration: timedelta
+) -> tuple[list[list[Shift]], float, list[int]]:
     """
     Для сгенерированных комбинаций водителей по дням
     мы составляем расписание на каждый день с учетом того, сколько
@@ -107,11 +108,11 @@ def brute_force_schedule() -> tuple[list[list[Shift]], float, list[int]]:
                     driver.type == "A"
                     and driver.first_day <= day < driver.first_day + 5
                 ):
-                    cnt[day - 1] += 1
+                    cnt[day] += 1
                 elif driver.type == "B" and (
                     driver.first_day == day or driver.first_day + 5 == day
                 ):
-                    cnt[day - 1] += 1
+                    cnt[day] += 1
         return cnt
 
     def generate_schedule_per_day(drivers: list[Driver], buses: list[Bus]):
@@ -182,7 +183,7 @@ def brute_force_schedule() -> tuple[list[list[Shift]], float, list[int]]:
                 next_time = current_time + timedelta(minutes=PEAK_MAX_WAIT)
                 is_peak = any(
                     start <= current_time < end
-                    or start <= current_time + ROUTE_DURATION < end
+                    or start <= current_time + route_duration < end
                     for start, end in PEAK_HOURS
                 )
                 current_invterval = PEAK_MAX_WAIT if is_peak else NON_PEAK_MAX_WAIT
@@ -239,14 +240,12 @@ def brute_force_schedule() -> tuple[list[list[Shift]], float, list[int]]:
                     if driver.start_time is None:
                         driver.start_time = current_time
 
-                    driver.next_available_time = current_time + ROUTE_DURATION
+                    driver.next_available_time = current_time + route_duration
                     driver.route_count += 1
                     driver.current_bus = bus
                     busy_drivers.append(driver)
                     last_bus_time = current_time
-                    if day - 1 >= len(schedule):
-                        print(day - 1)
-                    schedule[day - 1].append(Shift(driver, bus, current_time))
+                    schedule[day].append(Shift(driver, bus, current_time))
 
                 current_time = next_time
         """
@@ -278,7 +277,7 @@ def brute_force_schedule() -> tuple[list[list[Shift]], float, list[int]]:
     #         drivers[x].first_day = DAYS[i]
     #         recursive_days(drivers, x + 1)
 
-    for count_drivers in range(4, NUM_BUSES + 1):
+    for count_drivers in range(4, num_buses + 1):
         for count_drivers_a in range(0, count_drivers + 1):
             count_drivers_b = count_drivers - count_drivers_a
             drivers_a = [Driver("A", i) for i in range(1, count_drivers_a + 1)]
@@ -313,13 +312,14 @@ def display_one_day(schedule_d) -> str:
     return res
 
 
-schedule, loss, best_count = brute_force_schedule()
+if __name__ == "__main__":
+    schedule, loss, best_count = brute_force_schedule(NUM_BUSES, ROUTE_DURATION)
 
-print(loss)
-print(best_count)
-for day, day_s in enumerate(schedule):
-    print(day)
-    print("-----------")
-    for s in day_s:
-        print(s.driver.id, s.bus.id, s.start_time)
-    print("-----------")
+    print(loss)
+    print(best_count)
+    for day, day_s in enumerate(schedule):
+        print(day)
+        print("-----------")
+        for s in day_s:
+            print(s.driver.id, s.bus.id, s.start_time)
+        print("-----------")
